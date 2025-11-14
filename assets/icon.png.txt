@@ -1,6 +1,0 @@
-Placeholder for icon.png
-This file should be replaced with an actual PNG icon (20x20 pixels recommended)
-for your Power BI custom visual.
-
-You can create a simple icon or use an image editing tool to generate one.
-

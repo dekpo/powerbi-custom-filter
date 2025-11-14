@@ -9,4 +9,5 @@ dist/
 *.user
 *.userosscache
 *.sln.docstates
+*.pbix
 
