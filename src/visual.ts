@@ -34,10 +34,12 @@ export class OrganizationPasswordFilter implements powerbi.extensibility.visual.
     private passwordInput: HTMLInputElement;
     private submitButton: HTMLButtonElement;
     private messageDiv: HTMLDivElement;
+    private titleLabel: HTMLDivElement;
     private currentOrganization: string | null = null;
     private allData: any[] = [];
     private viewModel: ViewModel = { dataPoints: [] };
     private currentDataView: DataView | null = null;
+    private readonly STORAGE_KEY = "powerbi_org_password_filter";
 
     constructor(options?: VisualConstructorOptions) {
         if (!options) {
@@ -50,6 +52,11 @@ export class OrganizationPasswordFilter implements powerbi.extensibility.visual.
         // Create container
         const container = document.createElement("div");
         container.className = "passwordFilterContainer";
+        
+        // Create title label
+        this.titleLabel = document.createElement("div");
+        this.titleLabel.className = "titleLabel";
+        this.titleLabel.textContent = "Login"; // Default title
         
         // Create password input section
         const passwordSection = document.createElement("div");
@@ -71,6 +78,7 @@ export class OrganizationPasswordFilter implements powerbi.extensibility.visual.
         passwordSection.appendChild(this.submitButton);
         passwordSection.appendChild(this.messageDiv);
         
+        container.appendChild(this.titleLabel);
         container.appendChild(passwordSection);
         
         this.element.appendChild(container);
@@ -86,6 +94,15 @@ export class OrganizationPasswordFilter implements powerbi.extensibility.visual.
 
     public update(options: VisualUpdateOptions) {
         this.formattingSettings = this.formattingSettingsService.populateFormattingSettingsModel(VisualFormattingSettingsModel, options.dataViews);
+        
+        // Update title label from settings
+        const title = this.formattingSettings?.general?.title?.value || "Login";
+        if (this.titleLabel) {
+            this.titleLabel.textContent = title;
+        }
+        
+        // Restore password from localStorage if available
+        this.restorePasswordFromStorage();
         
         const dataView: DataView = options.dataViews[0];
         if (!dataView || !dataView.table) {
@@ -174,6 +191,9 @@ export class OrganizationPasswordFilter implements powerbi.extensibility.visual.
         
         console.log("[PasswordFilter] Password submitted:", password);
         
+        // Save password to localStorage for persistence
+        this.savePasswordToStorage(password);
+        
         if (!password) {
             this.showMessage("Please enter a password", "error");
             this.currentOrganization = null;
@@ -182,40 +202,8 @@ export class OrganizationPasswordFilter implements powerbi.extensibility.visual.
             return;
         }
 
-        // Get organization mapping from settings or use default
-        const mappingJson = this.formattingSettings?.filterSettings?.organizationMapping?.value || 
-            this.getDefaultPasswordMapping();
-        
-        let passwordMapping: { [key: string]: string };
-        try {
-            passwordMapping = typeof mappingJson === "string" ? JSON.parse(mappingJson) : mappingJson;
-        } catch (e) {
-            console.warn("[PasswordFilter] Failed to parse mapping JSON, using default:", e);
-            passwordMapping = this.getDefaultPasswordMapping();
-        }
-
-        console.log("[PasswordFilter] Password mapping:", passwordMapping);
-
-        // Check password and get organization
-        const organization = passwordMapping[password];
-        
-        if (!organization) {
-            this.showMessage("Invalid password", "error");
-            console.warn("[PasswordFilter] Invalid password:", password);
-            this.currentOrganization = null;
-            // Block all data access when password is invalid
-            this.blockAllData();
-            return;
-        }
-
-        console.log("[PasswordFilter] Password valid, organization:", organization);
-
-        // Apply filter
-        this.currentOrganization = organization;
-        this.showMessage("Access granted", "success");
-        
-        // Apply filter to Power BI globally - only show data for this organization
-        this.applyFilter(organization);
+        // Validate and apply password (with messages)
+        this.validateAndApplyPassword(password, false);
     }
 
     private getDefaultPasswordMapping(): { [key: string]: string } {
@@ -374,6 +362,88 @@ export class OrganizationPasswordFilter implements powerbi.extensibility.visual.
         // FormattingSettingsService doesn't have enumerateObjectInstances in this version
         // Return empty enumeration - formatting is handled via getFormattingModel
         return [];
+    }
+
+    /**
+     * Save password to localStorage for persistence across page navigations
+     */
+    private savePasswordToStorage(password: string): void {
+        try {
+            if (typeof Storage !== "undefined") {
+                localStorage.setItem(this.STORAGE_KEY, password);
+                console.log("[PasswordFilter] Password saved to localStorage");
+            }
+        } catch (error) {
+            console.warn("[PasswordFilter] Failed to save password to localStorage:", error);
+        }
+    }
+
+    /**
+     * Restore password from localStorage and auto-submit if valid
+     */
+    private restorePasswordFromStorage(): void {
+        try {
+            if (typeof Storage !== "undefined" && this.passwordInput) {
+                const savedPassword = localStorage.getItem(this.STORAGE_KEY);
+                if (savedPassword && savedPassword.trim()) {
+                    // Only restore if the input is empty (to avoid overwriting user input)
+                    if (!this.passwordInput.value || this.passwordInput.value.trim() === "") {
+                        this.passwordInput.value = savedPassword;
+                        console.log("[PasswordFilter] Password restored from localStorage");
+                        
+                        // Auto-submit if password is already saved and valid
+                        // This ensures the filter is applied immediately when navigating between pages
+                        // Only auto-submit if we have a dataView ready
+                        if (this.currentDataView && this.currentDataView.table) {
+                            // Use setTimeout to ensure the dataView is fully processed
+                            setTimeout(() => {
+                                // Check if password is still valid before auto-submitting
+                                const password = this.passwordInput.value.trim();
+                                if (password) {
+                                    // Validate and apply filter without showing messages
+                                    this.validateAndApplyPassword(password, true);
+                                }
+                            }, 150);
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            console.warn("[PasswordFilter] Failed to restore password from localStorage:", error);
+        }
+    }
+
+    /**
+     * Validate password and apply filter (used for auto-submit)
+     */
+    private validateAndApplyPassword(password: string, silent: boolean = false): void {
+        // Get organization mapping from settings or use default
+        const mappingJson = this.formattingSettings?.filterSettings?.organizationMapping?.value || 
+            this.getDefaultPasswordMapping();
+        
+        let passwordMapping: { [key: string]: string };
+        try {
+            passwordMapping = typeof mappingJson === "string" ? JSON.parse(mappingJson) : mappingJson;
+        } catch (e) {
+            console.warn("[PasswordFilter] Failed to parse mapping JSON, using default:", e);
+            passwordMapping = this.getDefaultPasswordMapping();
+        }
+
+        // Check password and get organization
+        const organization = passwordMapping[password];
+        
+        if (organization) {
+            this.currentOrganization = organization;
+            if (!silent) {
+                this.showMessage("Access granted", "success");
+            }
+            // Apply filter to Power BI globally
+            this.applyFilter(organization);
+        } else if (!silent) {
+            this.showMessage("Invalid password", "error");
+            this.currentOrganization = null;
+            this.blockAllData();
+        }
     }
 }
 

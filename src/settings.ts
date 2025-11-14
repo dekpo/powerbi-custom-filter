@@ -7,6 +7,22 @@ import FormattingSettingsSlice = formattingSettings.Slice;
 import FormattingSettingsModel = formattingSettings.Model;
 
 /**
+ * General Settings Card
+ */
+class GeneralSettingsCard extends FormattingSettingsCard {
+    public title = new formattingSettings.TextInput({
+        name: "title",
+        displayName: "Title",
+        value: "Login",
+        placeholder: "Enter component title"
+    });
+
+    public name: string = "general";
+    public displayName: string = "General";
+    public slices: Array<FormattingSettingsSlice> = [this.title];
+}
+
+/**
  * Password Settings Card
  */
 class PasswordSettingsCard extends FormattingSettingsCard {
@@ -54,8 +70,9 @@ class FilterSettingsCard extends FormattingSettingsCard {
  * Visual formatting settings model
  */
 export class VisualFormattingSettingsModel extends FormattingSettingsModel {
+    public general: GeneralSettingsCard = new GeneralSettingsCard();
     public passwordSettings: PasswordSettingsCard = new PasswordSettingsCard();
     public filterSettings: FilterSettingsCard = new FilterSettingsCard();
-    public cards = [this.passwordSettings, this.filterSettings];
+    public cards = [this.general, this.passwordSettings, this.filterSettings];
 }
 

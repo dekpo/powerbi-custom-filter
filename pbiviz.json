@@ -1,11 +1,11 @@
 {
   "visual": {
     "name": "OrganizationPasswordFilter",
-    "displayName": "Organization Password Filter",
+    "displayName": "Login",
     "guid": "OrgPassFilter",
     "visualClassName": "OrganizationPasswordFilter",
-    "version": "1.0.0.0",
-    "description": "A custom visual that prompts for a password and filters data by organization",
+    "version": "1.0.1.0",
+    "description": "A login component that prompts for a password and filters data by organization. Password persists across page navigations.",
     "supportUrl": "https://github.com",
     "gitHubUrl": ""
   },

@@ -35,6 +35,18 @@
     }
   ],
   "objects": {
+    "general": {
+      "displayName": "General",
+      "properties": {
+        "title": {
+          "displayName": "Title",
+          "type": {
+            "text": true
+          },
+          "description": "Title/label displayed above the password input"
+        }
+      }
+    },
     "passwordSettings": {
       "displayName": "Password Settings",
       "properties": {
