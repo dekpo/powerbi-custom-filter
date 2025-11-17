@@ -11,4 +11,6 @@ dist/
 *.userosscache
 *.sln.docstates
 *.pbix
+DEBUGGING_PROMPT.md
+webpack.statistics.prod.html
 
