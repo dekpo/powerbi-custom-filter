@@ -12,5 +12,6 @@ dist/
 *.sln.docstates
 *.pbix
 DEBUGGING_PROMPT.md
+DEBUGGING_GUIDE.md
 webpack.statistics.prod.html
 

@@ -90,7 +90,10 @@ A custom Power BI visual that provides a login interface with password-based org
    - Click **Enter** or press Enter
    - The visual will filter data by the corresponding organization
    - All visuals using the same data source will be filtered automatically
-   - **Password persists**: When you navigate to another page, the password field will be automatically filled and the filter will remain active
+   - **Password persistence**: The visual uses a smart dual-strategy approach:
+     - **Strategy 1**: Restores password from persisted properties (if available)
+     - **Strategy 2**: If properties aren't available, it checks the filter state and reverse-engineers the password from the currently filtered organization
+   - **Best Practice**: Place the visual on a dedicated login page (Page 1). When password is entered, the filter persists across ALL pages automatically. You can optionally add the visual to other pages if users need to change passwords, but it's not required.
    - Clear the password field and click Enter to reset the filter
    - **Admin mode**: Enter the admin password (if configured) to view all data without filtering
 
@@ -124,12 +127,31 @@ The visual supports an optional admin password that bypasses organization filter
 
 ## Password Persistence
 
-The visual uses Power BI's built-in `persistProperties` mechanism to save the password value. This means:
+The visual uses a **dual-strategy approach** for password persistence:
 
-- ✅ Password persists when navigating between pages in the same report
-- ✅ Password field is automatically populated when switching pages
-- ✅ Filter is automatically reapplied when navigating to maintain data access
-- ✅ Works across all instances of the visual in the same report
+### Strategy 1: Persisted Properties
+- Uses Power BI's `persistProperties` mechanism to save the password
+- Works when visuals are synchronized (when copying, choose "Synchronize")
+
+### Strategy 2: Filter State Detection (Smart Fallback)
+- **This is the key innovation!** Since filters persist across pages in Power BI, the visual can detect if a filter is already applied
+- When you navigate to a new page, if a filter is active, the visual examines which organization is currently filtered
+- It then reverse-engineers which password was used to create that filter
+- The password is automatically restored to the input field
+
+### How It Works:
+1. **Enter password on Page 1** → Filter is applied globally
+2. **Navigate to Page 2** → Filter persists (Power BI does this automatically)
+3. **Visual detects filter** → Sees only "FAO" organization is shown
+4. **Reverse-engineers password** → Looks up which password maps to "FAO" → Finds "FAO123"
+5. **Restores password** → Input field is auto-filled with "FAO123"
+
+### Best Practice:
+- **Recommended**: Place the visual on **ONE page only** (e.g., Page 1 - Login Page)
+- When password is entered, the filter applies to **ALL pages automatically**
+- Other pages don't need the visual - they just show filtered data
+- Users only need to enter password once per session
+- If you want to allow password changes from any page, you can add the visual to multiple pages, and it will auto-detect the current filter state
 
 **Note:** The password is stored within the Power BI report file and persists for the current session. It will be cleared when the report is closed or refreshed.
 

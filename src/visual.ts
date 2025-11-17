@@ -92,6 +92,7 @@ export class OrganizationPasswordFilter implements powerbi.extensibility.visual.
                 this.handlePasswordSubmit();
             }
         });
+
     }
 
     public update(options: VisualUpdateOptions) {
@@ -110,14 +111,95 @@ export class OrganizationPasswordFilter implements powerbi.extensibility.visual.
             return;
         }
         
-        // Restore password from persisted properties (Power BI's built-in persistence)
-        this.restorePasswordFromProperties(options);
-
-        // Store dataView for filter operations
+        // Store dataView for filter operations (needed for password validation)
         this.currentDataView = dataView;
+
+        // CRITICAL: Check if filter is already applied BEFORE blocking data
+        // This allows us to detect filters that persist across pages
+        let existingFilterOrg: string | null = null;
+        if (dataView.table && dataView.table.rows && dataView.table.rows.length > 0) {
+            const orgColIndex = dataView.table.columns.findIndex((col: any) => {
+                const colName = (col.displayName || col.queryName || "").toLowerCase();
+                return colName.includes("organization") || colName.includes("org");
+            });
+            if (orgColIndex >= 0) {
+                const filteredOrgs = new Set<string>();
+                dataView.table.rows.forEach((row: any) => {
+                    const orgValue = String(row[orgColIndex] || "").trim();
+                    if (orgValue) filteredOrgs.add(orgValue);
+                });
+                // If only ONE organization is shown, a filter is likely active
+                if (filteredOrgs.size === 1) {
+                    existingFilterOrg = Array.from(filteredOrgs)[0];
+                    console.log("[PasswordFilter] ⚠️ Detected existing filter for organization:", existingFilterOrg);
+                }
+            }
+        }
+
+        // Strategy 1: Try to restore password from persisted properties (check ALL locations)
+        // NOTE: This only works if visuals are synchronized OR if it's the same visual instance
+        let passwordRestored = this.restorePasswordFromProperties(options);
         
-        // Trigger auto-submit if password was restored (after dataView is ready)
-        this.triggerAutoSubmitIfNeeded();
+        // DEBUG: Log whether metadata.objects exists
+        if (options?.dataViews?.[0]?.metadata?.objects) {
+            console.log("[PasswordFilter] ✓ metadata.objects is available - persistProperties should work");
+        } else {
+            console.log("[PasswordFilter] ⚠️ metadata.objects is UNDEFINED - visual instances are NOT synchronized!");
+            console.log("[PasswordFilter] ⚠️ SOLUTION: Copy visual to other pages and choose 'Synchronize' when prompted");
+        }
+
+        // Strategy 2: If we detected an existing filter, restore password from it immediately
+        if (!passwordRestored && existingFilterOrg && this.formattingSettings) {
+            console.log("[PasswordFilter] Found existing filter, restoring password from organization:", existingFilterOrg);
+            const mappingJson = this.formattingSettings?.filterSettings?.organizationMapping?.value || 
+                this.getDefaultPasswordMapping();
+            let passwordMapping: { [key: string]: string };
+            try {
+                passwordMapping = typeof mappingJson === "string" ? JSON.parse(mappingJson) : mappingJson;
+            } catch (e) {
+                passwordMapping = this.getDefaultPasswordMapping();
+            }
+            // Find password that maps to this organization
+            for (const [password, org] of Object.entries(passwordMapping)) {
+                if (org === existingFilterOrg) {
+                    this.passwordInput.value = password;
+                    this.currentOrganization = existingFilterOrg;
+                    passwordRestored = true;
+                    console.log("[PasswordFilter] ✓ Password restored from existing filter:", password, "→", existingFilterOrg);
+                    break;
+                }
+            }
+        }
+        
+        // Strategy 3: If still no password, try filter state detection (fallback)
+        if (!passwordRestored && this.formattingSettings) {
+            console.log("[PasswordFilter] Properties restore failed, trying filter state detection...");
+            passwordRestored = this.restorePasswordFromFilter(dataView);
+        }
+        
+        // Strategy 3: If still no password, try again after a short delay (filter might not be applied yet)
+        // This handles race conditions where filter hasn't been applied when visual loads
+        if (!passwordRestored && this.formattingSettings) {
+            setTimeout(() => {
+                if (!this.passwordInput.value.trim()) {
+                    console.log("[PasswordFilter] Retrying filter state detection after delay...");
+                    const retryRestored = this.restorePasswordFromFilter(dataView);
+                    if (retryRestored && this.passwordInput.value.trim()) {
+                        const retryPassword = this.passwordInput.value.trim();
+                        console.log("[PasswordFilter] ✓ Password restored on retry:", retryPassword);
+                        this.validateAndApplyPassword(retryPassword, true);
+                    }
+                }
+            }, 500); // Wait 500ms for filter to be applied
+        }
+
+        // If password was restored, validate and apply it immediately (synchronously)
+        // This ensures currentOrganization is set before we check it below
+        if (passwordRestored && this.passwordInput && this.passwordInput.value.trim()) {
+            const restoredPassword = this.passwordInput.value.trim();
+            console.log("[PasswordFilter] Immediately validating restored password:", restoredPassword);
+            this.validateAndApplyPassword(restoredPassword, true);
+        }
 
         // Extract data from dataView
         const table = dataView.table;
@@ -182,6 +264,10 @@ export class OrganizationPasswordFilter implements powerbi.extensibility.visual.
             };
         });
 
+        // Fallback: Trigger auto-submit if password exists but wasn't validated yet
+        // This handles edge cases where immediate validation might have failed
+        this.triggerAutoSubmitIfNeeded();
+
         // CRITICAL: Block all data access if no password has been entered
         if (!this.currentOrganization) {
             this.blockAllData();
@@ -190,6 +276,8 @@ export class OrganizationPasswordFilter implements powerbi.extensibility.visual.
             this.clearFilter();
         } else {
             // Apply filter for the current organization
+            // IMPORTANT: Re-apply filter on every page load to ensure it persists
+            // Power BI filters might not persist across pages, so we re-apply them
             this.applyFilter(this.currentOrganization);
         }
     }
@@ -199,19 +287,31 @@ export class OrganizationPasswordFilter implements powerbi.extensibility.visual.
         
         console.log("[PasswordFilter] Password submitted:", password);
         
-        // Save password using Power BI's persistProperties (persists across pages)
-        this.savePasswordToProperties(password);
-        
         if (!password) {
             this.showMessage("Please enter a password", "error");
             this.currentOrganization = null;
             // Block all data access when password is empty
             this.blockAllData();
+            // Clear persisted password when empty
+            this.savePasswordToProperties("");
             return;
         }
 
+        // CRITICAL: Save password FIRST before validation
+        // This ensures it's persisted even if validation fails
+        this.savePasswordToProperties(password);
+        
         // Validate and apply password (with messages)
         this.validateAndApplyPassword(password, false);
+        
+        // Force Power BI to persist by triggering a visual update
+        // This ensures the persisted properties are saved to the report
+        if (this.currentDataView) {
+            // Re-trigger update to ensure persistence
+            setTimeout(() => {
+                this.savePasswordToProperties(password);
+            }, 100);
+        }
     }
 
     private getDefaultPasswordMapping(): { [key: string]: string } {
@@ -335,7 +435,7 @@ export class OrganizationPasswordFilter implements powerbi.extensibility.visual.
             console.log("[PasswordFilter] Filter JSON:", JSON.stringify(filterJson, null, 2));
 
             // Apply the filter globally using host.applyJsonFilter
-            // This will filter all visuals that use the same data source
+            // Use merge - this is the standard way to apply filters
             this.host.applyJsonFilter(filterJson, "general", "filter", powerbi.FilterAction.merge);
             
             console.log("[PasswordFilter] Filter applied successfully");
@@ -453,9 +553,23 @@ export class OrganizationPasswordFilter implements powerbi.extensibility.visual.
     }
 
     /**
-     * Save password using Power BI's persistProperties (persists across page navigations)
+     * Save password using multiple strategies for end-user persistence
+     * Strategy 1: sessionStorage (works for end-users across pages in the same session)
+     * Strategy 2: persistProperties (works during editing/design mode)
      */
     private savePasswordToProperties(password: string): void {
+        // Strategy 1: Try sessionStorage (for end-users viewing the report)
+        // sessionStorage persists across pages in the same browser session
+        try {
+            if (typeof sessionStorage !== 'undefined') {
+                sessionStorage.setItem('powerbi_org_password', password);
+                console.log("[PasswordFilter] ✓ Password saved to sessionStorage (end-user mode):", password);
+            }
+        } catch (storageError) {
+            console.warn("[PasswordFilter] sessionStorage not available:", storageError);
+        }
+        
+        // Strategy 2: Save via persistProperties (for editing mode)
         try {
             this.host.persistProperties({
                 merge: [{
@@ -463,59 +577,243 @@ export class OrganizationPasswordFilter implements powerbi.extensibility.visual.
                     properties: {
                         savedPassword: password
                     },
-                    selector: undefined as any
+                    selector: null as any
                 }]
             });
-            console.log("[PasswordFilter] Password saved using persistProperties");
+            console.log("[PasswordFilter] ✓ Password saved via persistProperties (editing mode)");
         } catch (error) {
-            console.warn("[PasswordFilter] Failed to save password using persistProperties:", error);
+            console.warn("[PasswordFilter] persistProperties failed:", error);
         }
     }
 
     /**
-     * Restore password from Power BI's persisted properties
+     * Restore password from multiple sources
+     * Priority 1: sessionStorage (for end-users)
+     * Priority 2: persistProperties (for editing mode)
+     * Returns true if a password was restored, false otherwise
      */
-    private restorePasswordFromProperties(options: VisualUpdateOptions): void {
+    private restorePasswordFromProperties(options: VisualUpdateOptions): boolean {
         try {
-            if (this.passwordInput && options?.dataViews?.[0]) {
+            if (!this.passwordInput) {
+                return false;
+            }
+
+            let persistedPassword = "";
+
+            // PRIORITY 1: Try sessionStorage first (works for end-users viewing the report)
+            try {
+                if (typeof sessionStorage !== 'undefined') {
+                    const sessionPass = sessionStorage.getItem('powerbi_org_password');
+                    if (sessionPass && sessionPass.trim()) {
+                        persistedPassword = sessionPass;
+                        console.log("[PasswordFilter] ✓ Password restored from sessionStorage (end-user mode):", persistedPassword);
+                    }
+                }
+            } catch (storageError) {
+                console.warn("[PasswordFilter] sessionStorage read failed:", storageError);
+            }
+
+            // Try to read from Power BI's persisted properties
+            // Check ALL possible locations where properties might be stored
+            
+            if (options?.dataViews?.[0]) {
                 const dataView = options.dataViews[0];
-                // Read persisted property from dataView objects
-                // The persisted property is stored in metadata.objects
-                const objects = dataView?.metadata?.objects;
-                const savedPassword = (objects?.passwordSettings as any)?.savedPassword as string || "";
                 
-                if (savedPassword && savedPassword.trim()) {
-                    // Restore the password value to the input field
-                    const currentValue = this.passwordInput.value.trim();
-                    if (!currentValue || currentValue === savedPassword) {
-                        this.passwordInput.value = savedPassword;
-                        console.log("[PasswordFilter] Password restored from persisted properties:", savedPassword);
+                // Method 1: Read from metadata.objects.passwordSettings.savedPassword (standard way)
+                const objects = dataView?.metadata?.objects;
+                if (objects?.passwordSettings) {
+                    persistedPassword = (objects.passwordSettings as any)?.savedPassword as string || "";
+                    console.log("[PasswordFilter] Method 1 - metadata.objects.passwordSettings:", persistedPassword || "not found");
+                }
+                
+                // Method 2: Check metadata.objects directly (alternative structure)
+                if (!persistedPassword && (dataView.metadata as any)?.objects?.passwordSettings) {
+                    persistedPassword = ((dataView.metadata as any).objects.passwordSettings as any)?.savedPassword as string || "";
+                    console.log("[PasswordFilter] Method 2 - (dataView.metadata as any).objects:", persistedPassword || "not found");
+                }
+                
+                // Method 3: Check if properties are stored at the root level of objects
+                if (!persistedPassword && objects) {
+                    // Sometimes properties are stored directly in objects
+                    for (const key in objects) {
+                        if (objects[key] && (objects[key] as any).savedPassword) {
+                            persistedPassword = (objects[key] as any).savedPassword as string || "";
+                            console.log("[PasswordFilter] Method 3 - Found savedPassword in objects." + key + ":", persistedPassword);
+                            break;
+                        }
+                    }
+                }
+                
+                // Method 4: Check dataView.metadata directly (deep fallback)
+                if (!persistedPassword) {
+                    const metadata = dataView.metadata as any;
+                    if (metadata?.objects) {
+                        // Try all possible nested structures
+                        const checkNested = (obj: any, path: string = ""): string => {
+                            if (!obj || typeof obj !== "object") return "";
+                            if (obj.savedPassword && typeof obj.savedPassword === "string") {
+                                console.log("[PasswordFilter] Method 4 - Found savedPassword at path:", path);
+                                return obj.savedPassword;
+                            }
+                            for (const key in obj) {
+                                const result = checkNested(obj[key], path ? `${path}.${key}` : key);
+                                if (result) return result;
+                            }
+                            return "";
+                        };
+                        persistedPassword = checkNested(metadata.objects);
                     }
                 }
             }
+            
+            // Method 5: Try to get from host directly (if available)
+            if (!persistedPassword && (this.host as any).getPersistedProperties) {
+                try {
+                    const persisted = (this.host as any).getPersistedProperties();
+                    if (persisted?.passwordSettings?.savedPassword) {
+                        persistedPassword = persisted.passwordSettings.savedPassword;
+                        console.log("[PasswordFilter] Method 5 - Found via host.getPersistedProperties:", persistedPassword);
+                    }
+                } catch (e) {
+                    // Method not available, ignore
+                }
+            }
+            
+            // If we found a persisted password, restore it
+            if (persistedPassword && persistedPassword.trim()) {
+                const currentValue = this.passwordInput.value.trim();
+                if (!currentValue || currentValue !== persistedPassword) {
+                    this.passwordInput.value = persistedPassword;
+                    console.log("[PasswordFilter] ✓ Password restored from persistProperties:", persistedPassword);
+                    return true;
+                } else {
+                    console.log("[PasswordFilter] ✓ Password already set:", persistedPassword);
+                    return true;
+                }
+            }
+            
+            console.log("[PasswordFilter] ✗ No persisted password found in any location");
+            return false;
         } catch (error) {
-            console.warn("[PasswordFilter] Failed to restore password from persisted properties:", error);
+            console.warn("[PasswordFilter] Failed to restore password:", error);
+            return false;
+        }
+    }
+
+    /**
+     * Restore password by checking if a filter is already applied
+     * This works because filters persist across pages, so we can reverse-engineer the password
+     * Returns true if password was restored, false otherwise
+     */
+    private restorePasswordFromFilter(dataView: DataView): boolean {
+        try {
+            if (!this.passwordInput || !dataView?.table || !this.formattingSettings) {
+                return false;
+            }
+
+            // Check if there's already a filter applied by examining the data
+            // If data is filtered, we can determine which organization is shown
+            const table = dataView.table;
+            const orgColIndex = table.columns.findIndex((col: any) => {
+                const colName = (col.displayName || col.queryName || "").toLowerCase();
+                return colName.includes("organization") || colName.includes("org");
+            });
+
+            if (orgColIndex < 0) {
+                console.log("[PasswordFilter] Filter detection: Organization column not found");
+                return false;
+            }
+
+            if (!table.rows || table.rows.length === 0) {
+                console.log("[PasswordFilter] Filter detection: No rows in data");
+                return false;
+            }
+
+            // Get unique organization values from the filtered data
+            const filteredOrgs = new Set<string>();
+            table.rows.forEach((row: any) => {
+                const orgValue = String(row[orgColIndex] || "").trim();
+                if (orgValue) {
+                    filteredOrgs.add(orgValue);
+                }
+            });
+
+            console.log("[PasswordFilter] Filter detection: Found organizations:", Array.from(filteredOrgs));
+
+            // Get password mapping
+            const mappingJson = this.formattingSettings?.filterSettings?.organizationMapping?.value || 
+                this.getDefaultPasswordMapping();
+            
+            let passwordMapping: { [key: string]: string };
+            try {
+                passwordMapping = typeof mappingJson === "string" ? JSON.parse(mappingJson) : mappingJson;
+            } catch (e) {
+                console.warn("[PasswordFilter] Failed to parse password mapping, using defaults");
+                passwordMapping = this.getDefaultPasswordMapping();
+            }
+
+            // If only one organization is shown, we can reverse-engineer the password
+            if (filteredOrgs.size === 1) {
+                const filteredOrg = Array.from(filteredOrgs)[0];
+                console.log("[PasswordFilter] Filter detection: Single organization detected:", filteredOrg);
+                
+                // Find password that maps to this organization
+                for (const [password, org] of Object.entries(passwordMapping)) {
+                    if (org === filteredOrg) {
+                        // Found the password! Restore it
+                        const currentValue = this.passwordInput.value.trim();
+                        if (!currentValue || currentValue !== password) {
+                            this.passwordInput.value = password;
+                            this.currentOrganization = filteredOrg;
+                            console.log("[PasswordFilter] ✓ Password restored from filter state:", password, "→", filteredOrg);
+                            return true;
+                        } else {
+                            this.currentOrganization = filteredOrg;
+                            console.log("[PasswordFilter] ✓ Password already matches filter state:", password);
+                            return true;
+                        }
+                    }
+                }
+                console.log("[PasswordFilter] Filter detection: No password found for organization:", filteredOrg);
+            } else if (filteredOrgs.size > 1) {
+                // Multiple orgs shown - might be admin mode or no filter
+                console.log("[PasswordFilter] Filter detection: Multiple organizations detected (might be admin or no filter):", Array.from(filteredOrgs));
+                
+                // If admin password exists and we see multiple orgs, it might be admin mode
+                // But we can't be sure, so we don't restore password
+            } else {
+                console.log("[PasswordFilter] Filter detection: No organizations found in data");
+            }
+
+            return false;
+        } catch (error) {
+            console.warn("[PasswordFilter] Failed to restore password from filter:", error);
+            return false;
         }
     }
 
     /**
      * Trigger auto-submit if password was restored (called after dataView is ready)
+     * This is a fallback method - password validation should happen immediately in update()
      */
     private triggerAutoSubmitIfNeeded(): void {
         try {
             if (this.passwordInput && this.currentDataView && this.currentDataView.table) {
                 const password = this.passwordInput.value.trim();
-                if (password) {
-                    // Auto-submit silently to reapply filter (password was already validated when restored)
+                // Only trigger if password exists but currentOrganization is not set
+                // This handles edge cases where immediate validation might have failed
+                if (password && !this.currentOrganization) {
+                    console.log("[PasswordFilter] Fallback: Validating password that wasn't validated immediately");
                     setTimeout(() => {
                         this.validateAndApplyPassword(password, true);
-                    }, 200);
+                    }, 100);
                 }
             }
         } catch (error) {
             console.warn("[PasswordFilter] Failed to trigger auto-submit:", error);
         }
     }
+
 
     /**
      * Hide Power BI's default visual title/header
