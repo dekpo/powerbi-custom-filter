@@ -61,6 +61,12 @@
           "type": {
             "bool": true
           }
+        },
+        "savedPassword": {
+          "displayName": "Saved Password",
+          "type": {
+            "text": true
+          }
         }
       }
     },

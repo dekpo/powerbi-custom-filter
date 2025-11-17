@@ -1,18 +1,23 @@
-# Power BI Custom Visual: Organization Password Filter
+# Power BI Custom Visual: Login
 
-A custom Power BI visual that allows users to enter a password and filters the data source based on the organization value. The visual provides password-based access control, filtering all visuals that share the same data source when a valid password is entered.
+A custom Power BI visual that provides a login interface with password-based organization filtering. The visual allows users to enter a password and filters the data source based on the organization value. Password persists across page navigations, making it ideal for use as a login page at the beginning of presentations.
 
-**Visual Name in Power BI:** Organization Password Filter  
-**Package File:** `OrgPassFilter.1.0.0.0.pbiviz`
+**Visual Name in Power BI:** Login  
+**Package File:** `OrgPassFilter.1.0.1.0.pbiviz`  
+**Version:** 1.0.1.0
 
 ## Features
 
 - **Password-based filtering**: Enter a password to filter data by organization
+- **Password persistence**: Password value persists across page navigations using Power BI's built-in persistence mechanism
+- **Auto-filter restoration**: Automatically reapplies filters when navigating between pages
+- **Customizable title**: Change the component title/label via formatting options (default: "Login")
 - **Secure access control**: Different passwords unlock different organizations
 - **Global filtering**: Applies filters to all visuals using the same data source
 - **Dynamic filtering**: Filters are applied to the Power BI data model in real-time
 - **Customizable password mapping**: Configure password-to-organization mappings via formatting options
 - **Data protection**: Blocks all data access until a valid password is entered
+- **Clean UI**: Power BI default title is hidden, showing only your custom title
 
 ## Prerequisites
 
@@ -60,26 +65,29 @@ A custom Power BI visual that allows users to enter a password and filters the d
    - Drag the visual to your report canvas
    - Add your data fields to the visual (especially the Organization column)
 
-3. **Configure password mapping:**
+3. **Configure the visual:**
    - Select the visual
    - Go to **Format visual** pane
-   - Expand **Filter Settings**
-   - Edit the **Organization Password Mapping** JSON:
-     ```json
-     {
-       "FAO123": "FAO",
-       "UNICEF123": "UNICEF",
-       "UNHCR123": "UNHCR",
-       "WHO123": "WHO",
-       "WIPO123": "WIPO"
-     }
-     ```
+   - **General Settings:**
+     - **Title**: Customize the title/label displayed above the password input (default: "Login")
+   - **Filter Settings:**
+     - **Organization Password Mapping**: Edit the JSON mapping:
+       ```json
+       {
+         "FAO123": "FAO",
+         "UNICEF123": "UNICEF",
+         "UNHCR123": "UNHCR",
+         "WHO123": "WHO",
+         "WIPO123": "WIPO"
+       }
+       ```
 
 4. **Use the visual:**
    - Enter a password in the input field (e.g., "FAO123")
    - Click **Enter** or press Enter
    - The visual will filter data by the corresponding organization
    - All visuals using the same data source will be filtered automatically
+   - **Password persists**: When you navigate to another page, the password field will be automatically filled and the filter will remain active
    - Clear the password field and click Enter to reset the filter
 
 ## Default Password Mappings
@@ -100,14 +108,26 @@ You can customize these in the visual's formatting options.
 - The organization values should match the values in your password mapping exactly (case-sensitive)
 - All visuals that need to be filtered must use the same data source table
 
+## Password Persistence
+
+The visual uses Power BI's built-in `persistProperties` mechanism to save the password value. This means:
+
+- ✅ Password persists when navigating between pages in the same report
+- ✅ Password field is automatically populated when switching pages
+- ✅ Filter is automatically reapplied when navigating to maintain data access
+- ✅ Works across all instances of the visual in the same report
+
+**Note:** The password is stored within the Power BI report file and persists for the current session. It will be cleared when the report is closed or refreshed.
+
 ## Security Considerations
 
 ⚠️ **Important Security Notes:**
 
 - This visual provides **client-side password protection only** - it's not a secure authentication mechanism
-- Passwords are stored in plain text in the visual's configuration
+- Passwords are stored in plain text in the visual's configuration and persisted properties
 - This is suitable for basic access control within Power BI reports but should not be used for sensitive data protection
 - For production use, consider implementing proper authentication at the data source level
+- Password persistence is session-based and stored within the Power BI report file
 
 ## Project Structure
 

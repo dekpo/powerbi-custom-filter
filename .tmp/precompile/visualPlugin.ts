@@ -7,7 +7,7 @@ var powerbiKey: any = "powerbi";
 var powerbi: any = window[powerbiKey];
 var OrgPassFilter: IVisualPlugin = {
     name: 'OrgPassFilter',
-    displayName: 'Organization Password Filter',
+    displayName: 'Login',
     class: 'OrganizationPasswordFilter',
     apiVersion: '5.3.0',
     create: (options?: VisualConstructorOptions) => {

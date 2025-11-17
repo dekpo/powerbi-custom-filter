@@ -39,7 +39,6 @@ export class OrganizationPasswordFilter implements powerbi.extensibility.visual.
     private allData: any[] = [];
     private viewModel: ViewModel = { dataPoints: [] };
     private currentDataView: DataView | null = null;
-    private readonly STORAGE_KEY = "powerbi_org_password_filter";
 
     constructor(options?: VisualConstructorOptions) {
         if (!options) {
@@ -83,6 +82,9 @@ export class OrganizationPasswordFilter implements powerbi.extensibility.visual.
         
         this.element.appendChild(container);
         
+        // Hide Power BI's default title/header (shows column name like "Organization")
+        this.hidePowerBITitle();
+        
         // Add event listeners
         this.submitButton.addEventListener("click", () => this.handlePasswordSubmit());
         this.passwordInput.addEventListener("keypress", (e) => {
@@ -101,18 +103,21 @@ export class OrganizationPasswordFilter implements powerbi.extensibility.visual.
             this.titleLabel.textContent = title;
         }
         
-        // Restore password from localStorage if available
-        this.restorePasswordFromStorage();
-        
         const dataView: DataView = options.dataViews[0];
         if (!dataView || !dataView.table) {
             // Block all data access if no data view
             this.blockAllData();
             return;
         }
+        
+        // Restore password from persisted properties (Power BI's built-in persistence)
+        this.restorePasswordFromProperties(options);
 
         // Store dataView for filter operations
         this.currentDataView = dataView;
+        
+        // Trigger auto-submit if password was restored (after dataView is ready)
+        this.triggerAutoSubmitIfNeeded();
 
         // Extract data from dataView
         const table = dataView.table;
@@ -191,8 +196,8 @@ export class OrganizationPasswordFilter implements powerbi.extensibility.visual.
         
         console.log("[PasswordFilter] Password submitted:", password);
         
-        // Save password to localStorage for persistence
-        this.savePasswordToStorage(password);
+        // Save password using Power BI's persistProperties (persists across pages)
+        this.savePasswordToProperties(password);
         
         if (!password) {
             this.showMessage("Please enter a password", "error");
@@ -365,51 +370,150 @@ export class OrganizationPasswordFilter implements powerbi.extensibility.visual.
     }
 
     /**
-     * Save password to localStorage for persistence across page navigations
+     * Save password using Power BI's persistProperties (persists across page navigations)
      */
-    private savePasswordToStorage(password: string): void {
+    private savePasswordToProperties(password: string): void {
         try {
-            if (typeof Storage !== "undefined") {
-                localStorage.setItem(this.STORAGE_KEY, password);
-                console.log("[PasswordFilter] Password saved to localStorage");
-            }
+            this.host.persistProperties({
+                merge: [{
+                    objectName: "passwordSettings",
+                    properties: {
+                        savedPassword: password
+                    },
+                    selector: undefined as any
+                }]
+            });
+            console.log("[PasswordFilter] Password saved using persistProperties");
         } catch (error) {
-            console.warn("[PasswordFilter] Failed to save password to localStorage:", error);
+            console.warn("[PasswordFilter] Failed to save password using persistProperties:", error);
         }
     }
 
     /**
-     * Restore password from localStorage and auto-submit if valid
+     * Restore password from Power BI's persisted properties
      */
-    private restorePasswordFromStorage(): void {
+    private restorePasswordFromProperties(options: VisualUpdateOptions): void {
         try {
-            if (typeof Storage !== "undefined" && this.passwordInput) {
-                const savedPassword = localStorage.getItem(this.STORAGE_KEY);
+            if (this.passwordInput && options?.dataViews?.[0]) {
+                const dataView = options.dataViews[0];
+                // Read persisted property from dataView objects
+                // The persisted property is stored in metadata.objects
+                const objects = dataView?.metadata?.objects;
+                const savedPassword = (objects?.passwordSettings as any)?.savedPassword as string || "";
+                
                 if (savedPassword && savedPassword.trim()) {
-                    // Only restore if the input is empty (to avoid overwriting user input)
-                    if (!this.passwordInput.value || this.passwordInput.value.trim() === "") {
+                    // Restore the password value to the input field
+                    const currentValue = this.passwordInput.value.trim();
+                    if (!currentValue || currentValue === savedPassword) {
                         this.passwordInput.value = savedPassword;
-                        console.log("[PasswordFilter] Password restored from localStorage");
-                        
-                        // Auto-submit if password is already saved and valid
-                        // This ensures the filter is applied immediately when navigating between pages
-                        // Only auto-submit if we have a dataView ready
-                        if (this.currentDataView && this.currentDataView.table) {
-                            // Use setTimeout to ensure the dataView is fully processed
-                            setTimeout(() => {
-                                // Check if password is still valid before auto-submitting
-                                const password = this.passwordInput.value.trim();
-                                if (password) {
-                                    // Validate and apply filter without showing messages
-                                    this.validateAndApplyPassword(password, true);
-                                }
-                            }, 150);
-                        }
+                        console.log("[PasswordFilter] Password restored from persisted properties:", savedPassword);
                     }
                 }
             }
         } catch (error) {
-            console.warn("[PasswordFilter] Failed to restore password from localStorage:", error);
+            console.warn("[PasswordFilter] Failed to restore password from persisted properties:", error);
+        }
+    }
+
+    /**
+     * Trigger auto-submit if password was restored (called after dataView is ready)
+     */
+    private triggerAutoSubmitIfNeeded(): void {
+        try {
+            if (this.passwordInput && this.currentDataView && this.currentDataView.table) {
+                const password = this.passwordInput.value.trim();
+                if (password) {
+                    // Auto-submit silently to reapply filter (password was already validated when restored)
+                    setTimeout(() => {
+                        this.validateAndApplyPassword(password, true);
+                    }, 200);
+                }
+            }
+        } catch (error) {
+            console.warn("[PasswordFilter] Failed to trigger auto-submit:", error);
+        }
+    }
+
+    /**
+     * Hide Power BI's default visual title/header
+     */
+    private hidePowerBITitle(): void {
+        try {
+            // Power BI adds a title element as a sibling or parent of our visual element
+            // Try to find and hide it
+            let currentElement: HTMLElement | null = this.element.parentElement;
+            let attempts = 0;
+            const maxAttempts = 5;
+            
+            while (currentElement && attempts < maxAttempts) {
+                // Look for common Power BI title elements
+                const titleElements = currentElement.querySelectorAll(
+                    '[class*="title"], [class*="header"], [class*="titleText"], [class*="visualTitle"]'
+                );
+                
+                titleElements.forEach((el: Element) => {
+                    const htmlEl = el as HTMLElement;
+                    // Only hide if it's not our custom title
+                    if (!htmlEl.classList.contains('titleLabel')) {
+                        htmlEl.style.display = 'none';
+                    }
+                });
+                
+                // Also check for text nodes that might be the title
+                const textContent = currentElement.textContent || '';
+                if (textContent.trim() && currentElement !== this.element && 
+                    !currentElement.contains(this.element)) {
+                    // Check if this might be a title container
+                    const children = Array.from(currentElement.children);
+                    if (children.length === 1 && children[0] === this.element) {
+                        // This might be a wrapper, check siblings
+                        const siblings = Array.from(currentElement.parentElement?.children || []);
+                        siblings.forEach((sibling: Element) => {
+                            if (sibling !== currentElement && sibling.textContent) {
+                                const siblingEl = sibling as HTMLElement;
+                                if (siblingEl.textContent?.trim() && 
+                                    !siblingEl.contains(this.element)) {
+                                    siblingEl.style.display = 'none';
+                                }
+                            }
+                        });
+                    }
+                }
+                
+                currentElement = currentElement.parentElement;
+                attempts++;
+            }
+            
+            // Also use MutationObserver to catch dynamically added titles
+            if (this.element.parentElement) {
+                const observer = new MutationObserver((mutations) => {
+                    mutations.forEach((mutation) => {
+                        mutation.addedNodes.forEach((node) => {
+                            if (node.nodeType === 1) { // Element node
+                                const el = node as HTMLElement;
+                                if (el.querySelector && 
+                                    (el.querySelector('[class*="title"]') || 
+                                     el.querySelector('[class*="header"]'))) {
+                                    const titleEls = el.querySelectorAll('[class*="title"], [class*="header"]');
+                                    titleEls.forEach((titleEl: Element) => {
+                                        const htmlEl = titleEl as HTMLElement;
+                                        if (!htmlEl.classList.contains('titleLabel')) {
+                                            htmlEl.style.display = 'none';
+                                        }
+                                    });
+                                }
+                            }
+                        });
+                    });
+                });
+                
+                observer.observe(this.element.parentElement, {
+                    childList: true,
+                    subtree: true
+                });
+            }
+        } catch (error) {
+            console.warn("[PasswordFilter] Failed to hide Power BI title:", error);
         }
     }
 

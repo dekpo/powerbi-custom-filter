@@ -7,6 +7,17 @@
   overflow: auto;
   box-sizing: border-box;
 }
+:global .visual-header,
+:global .visual-title,
+:global .titleText,
+:global [class*="titleText"],
+:global [class*="visualTitle"] {
+  display: none !important;
+}
+:global [class*="visualContainer"] [class*="title"],
+:global [class*="visualContainer"] [class*="header"] {
+  display: none !important;
+}
 .passwordFilterContainer {
   display: flex;
   flex-direction: column;
@@ -14,6 +25,13 @@
   height: 100%;
   padding: 10px;
   box-sizing: border-box;
+}
+.titleLabel {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333333;
+  margin-bottom: 10px;
+  padding: 5px 0;
 }
 .passwordSection {
   display: flex;

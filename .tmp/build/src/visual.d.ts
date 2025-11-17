@@ -12,6 +12,7 @@ export declare class OrganizationPasswordFilter implements powerbi.extensibility
     private passwordInput;
     private submitButton;
     private messageDiv;
+    private titleLabel;
     private currentOrganization;
     private allData;
     private viewModel;
@@ -25,4 +26,9 @@ export declare class OrganizationPasswordFilter implements powerbi.extensibility
     private showMessage;
     getFormattingModel(): powerbi.visuals.FormattingModel;
     enumerateObjectInstances(_options: EnumerateVisualObjectInstancesOptions): VisualObjectInstanceEnumeration;
+    private savePasswordToProperties;
+    private restorePasswordFromProperties;
+    private triggerAutoSubmitIfNeeded;
+    private hidePowerBITitle;
+    private validateAndApplyPassword;
 }

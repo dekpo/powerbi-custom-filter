@@ -39,9 +39,16 @@ class PasswordSettingsCard extends FormattingSettingsCard {
         value: false
     });
 
+    public savedPassword = new formattingSettings.TextInput({
+        name: "savedPassword",
+        displayName: "Saved Password",
+        value: "",
+        placeholder: ""
+    });
+
     public name: string = "passwordSettings";
     public displayName: string = "Password Settings";
-    public slices: Array<FormattingSettingsSlice> = [this.password, this.showPassword];
+    public slices: Array<FormattingSettingsSlice> = [this.password, this.showPassword, this.savedPassword];
 }
 
 /**

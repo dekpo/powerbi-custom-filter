@@ -8,6 +8,28 @@
     box-sizing: border-box;
 }
 
+// Hide Power BI's default visual title/header
+// This targets Power BI's default title that shows column names
+:global {
+    // Hide common Power BI title/header classes
+    .visual-header,
+    .visual-title,
+    .titleText,
+    [class*="titleText"],
+    [class*="visualTitle"] {
+        display: none !important;
+    }
+}
+
+// Target the parent container to hide title elements
+:global {
+    // Hide title elements within Power BI's visual container
+    [class*="visualContainer"] [class*="title"],
+    [class*="visualContainer"] [class*="header"] {
+        display: none !important;
+    }
+}
+
 .passwordFilterContainer {
     display: flex;
     flex-direction: column;
