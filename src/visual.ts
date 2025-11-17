@@ -225,12 +225,6 @@ export class OrganizationPasswordFilter implements powerbi.extensibility.visual.
         try {
             console.log("[PasswordFilter] Blocking all data access - no valid password");
             
-            // Display warning icon with custom message instead of showing an error
-            this.host.displayWarningIcon(
-                'Data Access Restricted',
-                'Please enter a valid password to view organization data.'
-            );
-            
             if (!this.currentDataView || !this.currentDataView.table) {
                 // If no data view, try to apply a blocking filter anyway
                 // This will prevent any data from showing
@@ -340,15 +334,6 @@ export class OrganizationPasswordFilter implements powerbi.extensibility.visual.
             // Apply the filter globally using host.applyJsonFilter
             // This will filter all visuals that use the same data source
             this.host.applyJsonFilter(filterJson, "general", "filter", powerbi.FilterAction.merge);
-            
-            // Clear the warning icon since data access is now granted
-            try {
-                // Clear warning icon by calling with empty strings (Power BI API pattern)
-                this.host.displayWarningIcon('', '');
-            } catch (clearError) {
-                // If clearing fails, it's not critical - the warning will be replaced on next blockAllData call
-                console.log("[PasswordFilter] Warning icon cleared or already cleared");
-            }
             
             console.log("[PasswordFilter] Filter applied successfully");
             

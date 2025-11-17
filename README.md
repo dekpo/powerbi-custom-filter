@@ -18,7 +18,7 @@ A custom Power BI visual that provides a login interface with password-based org
 - **Customizable password mapping**: Configure password-to-organization mappings via formatting options
 - **Data protection**: Blocks all data access until a valid password is entered
 - **Clean UI**: Power BI default title is hidden, showing only your custom title
-- **Custom warning messages**: Displays a user-friendly warning icon with custom message instead of error messages when data is blocked
+- **User-friendly messages**: Displays custom error and success messages below the password field
 
 ## Prerequisites
 
@@ -120,21 +120,12 @@ The visual uses Power BI's built-in `persistProperties` mechanism to save the pa
 
 **Note:** The password is stored within the Power BI report file and persists for the current session. It will be cleared when the report is closed or refreshed.
 
-## Custom Warning Messages
+## User Messages
 
-The visual displays a user-friendly warning icon instead of Power BI's default error messages when data is blocked due to missing or invalid passwords.
-
-**How it works:**
-- When no password is entered or an invalid password is provided, a warning icon appears on the password filter visual
-- Users can hover over or click the warning icon to see a custom message: "Please enter a valid password to view organization data."
-- The warning icon automatically clears when a valid password is entered
-- The filter works globally across all pages, but the warning icon appears only on pages that contain the password filter visual instance
-
-**Best Practice:**
-- Place the password filter visual on each page where you want the warning message to appear, or
-- Place it on a dedicated login page so users see the warning before navigating to other pages
-
-**Note:** Other visuals on pages without the password filter visual will still be filtered (showing no data), but they will display Power BI's default empty state rather than the custom warning message.
+The visual displays custom messages below the password field to provide user feedback:
+- **Error messages**: "Please enter a password" or "Invalid password" when validation fails
+- **Success messages**: "Access granted" when a valid password is entered (displays for 3 seconds)
+- These messages appear directly below the password input field for clear visibility
 
 ## Security Considerations
 
