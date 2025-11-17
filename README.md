@@ -3,8 +3,8 @@
 A custom Power BI visual that provides a login interface with password-based organization filtering. The visual allows users to enter a password and filters the data source based on the organization value. Password persists across page navigations, making it ideal for use as a login page at the beginning of presentations.
 
 **Visual Name in Power BI:** Login  
-**Package File:** `OrgPassFilter.1.0.1.0.pbiviz`  
-**Version:** 1.0.1.0
+**Package File:** `OrgPassFilter.1.0.2.0.pbiviz`  
+**Version:** 1.0.2.0
 
 ## Features
 
@@ -18,6 +18,7 @@ A custom Power BI visual that provides a login interface with password-based org
 - **Customizable password mapping**: Configure password-to-organization mappings via formatting options
 - **Data protection**: Blocks all data access until a valid password is entered
 - **Clean UI**: Power BI default title is hidden, showing only your custom title
+- **Custom warning messages**: Displays a user-friendly warning icon with custom message instead of error messages when data is blocked
 
 ## Prerequisites
 
@@ -43,7 +44,7 @@ A custom Power BI visual that provides a login interface with password-based org
    ```bash
    npm run build
    ```
-   This creates `OrgPassFilter.1.0.0.0.pbiviz` in the `dist` folder.
+   This creates `OrgPassFilter.1.0.2.0.pbiviz` in the `dist` folder.
 
 2. **Or start the development server (optional):**
    ```bash
@@ -58,7 +59,7 @@ A custom Power BI visual that provides a login interface with password-based org
    - Go to **Visualizations** pane
    - Click the **...** (three dots) at the bottom
    - Select **Import a visual from a file**
-   - Choose `OrgPassFilter.1.0.0.0.pbiviz` from the `dist` folder
+   - Choose `OrgPassFilter.1.0.2.0.pbiviz` from the `dist` folder
 
 2. **Add data:**
    - Import your `data.csv` file into Power BI
@@ -119,6 +120,22 @@ The visual uses Power BI's built-in `persistProperties` mechanism to save the pa
 
 **Note:** The password is stored within the Power BI report file and persists for the current session. It will be cleared when the report is closed or refreshed.
 
+## Custom Warning Messages
+
+The visual displays a user-friendly warning icon instead of Power BI's default error messages when data is blocked due to missing or invalid passwords.
+
+**How it works:**
+- When no password is entered or an invalid password is provided, a warning icon appears on the password filter visual
+- Users can hover over or click the warning icon to see a custom message: "Please enter a valid password to view organization data."
+- The warning icon automatically clears when a valid password is entered
+- The filter works globally across all pages, but the warning icon appears only on pages that contain the password filter visual instance
+
+**Best Practice:**
+- Place the password filter visual on each page where you want the warning message to appear, or
+- Place it on a dedicated login page so users see the warning before navigating to other pages
+
+**Note:** Other visuals on pages without the password filter visual will still be filtered (showing no data), but they will display Power BI's default empty state rather than the custom warning message.
+
 ## Security Considerations
 
 ⚠️ **Important Security Notes:**
@@ -148,7 +165,7 @@ The visual uses Power BI's built-in `persistProperties` mechanism to save the pa
 ## Troubleshooting
 
 **Visual not appearing:**
-- Make sure you've imported `OrgPassFilter.1.0.0.0.pbiviz` correctly
+- Make sure you've imported `OrgPassFilter.1.0.2.0.pbiviz` correctly
 - Check that Power BI Desktop is updated to the latest version
 - Try restarting Power BI Desktop after importing
 
@@ -177,7 +194,7 @@ To modify the visual:
 2. Modify styles in `style/visual.less`
 3. Update capabilities in `capabilities.json`
 4. Rebuild with `npm run build`
-5. Re-import `OrgPassFilter.1.0.0.0.pbiviz` in Power BI Desktop
+5. Re-import `OrgPassFilter.1.0.2.0.pbiviz` in Power BI Desktop
 
 **Development Server:**
 - Run `npm start` to start the development server (optional)
